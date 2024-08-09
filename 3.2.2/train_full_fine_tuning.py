@@ -23,6 +23,14 @@ from trl import (
 from sklearn.model_selection import train_test_split
 
 # Load dataset from the hub
+
+from huggingface_hub import login
+
+login(
+    token="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",
+    add_to_git_credential=True
+)
+
 dataset = load_dataset("beomi/KoAlpaca-v1.1a")
 columns_to_remove = list(dataset["train"].features)
 
@@ -68,11 +76,11 @@ class ScriptArguments:
             "help": "데이터셋 파일 경로"
         },
     )
-    model_name: str = field(
+    model_id: str = field(
     default=None, metadata={"help": "SFT 학습에 사용할 모델 ID"}
     )
     max_seq_length: int = field(
-        default=2405, metadata={"help": "SFT Trainer에 사용할 최대 시퀀스 길이"}
+        default=512, metadata={"help": "SFT Trainer에 사용할 최대 시퀀스 길이"}
     )
     question_key: str = field(
     default=None, metadata={"help": "지시사항 데이터셋의 질문 키"}
@@ -86,21 +94,20 @@ def training_function(script_args, training_args):
     # 데이터셋 불러오기 
     train_dataset = load_dataset(
         "json",
-        data_files=os.path.join(script_args.dataset_path, "./train_dataset.json"),
+        data_files=os.path.join(script_args.dataset_path, "train_dataset.json"),
         split="train",
     )
     test_dataset = load_dataset(
         "json",
-        data_files=os.path.join(script_args.dataset_path, "./test_dataset.json"),
+        data_files=os.path.join(script_args.dataset_path, "test_dataset.json"),
         split="train",
     )
 
     # 토크나이저 및 데이터셋 chat_template으로 변경하기      
-    tokenizer = AutoTokenizer.from_pretrained(script_args.model_name, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(script_args.model_id, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.chat_template = LLAMA_3_CHAT_TEMPLATE
     tokenizer.padding_side = 'right'
-    
     # template dataset
     def template_dataset(examples):
         return{"text":  tokenizer.apply_chat_template(examples["messages"], tokenize=False)}
@@ -117,8 +124,8 @@ def training_function(script_args, training_args):
 
     # Model 및 파라미터 설정하기 
     model = AutoModelForCausalLM.from_pretrained(
-        script_args.model_name,
-        attn_implementation="flash_attention_2", # SDPA를 사용하고, 대안으로 'flash_attention_2'를 사용할 수 있음
+        script_args.model_id,
+        attn_implementation="sdpa", # SDPA를 사용하고, 대안으로 'flash_attention_2'를 사용할 수 있음
         torch_dtype=torch.bfloat16,
         use_cache=False if training_args.gradient_checkpointing else True,  # 그래디언트 체크포인팅을 사용할 때는 True가 필요함 
     )
@@ -141,8 +148,6 @@ def training_function(script_args, training_args):
             "append_concat_token": False, 
         },
     )
-    # if trainer.accelerator.is_main_process:
-    #     trainer.model.print_trainable_parameters()
 
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
@@ -154,12 +159,7 @@ def training_function(script_args, training_args):
     trainer.save_model()
     
 if __name__ == "__main__":
-    from huggingface_hub import login
-    
-    login(
-      token="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",
-      add_to_git_credential=True
-    )
+
     parser = TrlParser((ScriptArguments, TrainingArguments))
     script_args, training_args = parser.parse_args_and_config()    
     
