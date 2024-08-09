@@ -68,7 +68,7 @@ class ScriptArguments:
             "help": "데이터셋 파일 경로"
         },
     )
-    model_id: str = field(
+    model_name: str = field(
     default=None, metadata={"help": "SFT 학습에 사용할 모델 ID"}
     )
     max_seq_length: int = field(
@@ -96,7 +96,7 @@ def training_function(script_args, training_args):
     )
 
     # 토크나이저 및 데이터셋 chat_template으로 변경하기      
-    tokenizer = AutoTokenizer.from_pretrained(script_args.model_id, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(script_args.model_name, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.chat_template = LLAMA_3_CHAT_TEMPLATE
     tokenizer.padding_side = 'right'
@@ -117,7 +117,7 @@ def training_function(script_args, training_args):
 
     # Model 및 파라미터 설정하기 
     model = AutoModelForCausalLM.from_pretrained(
-        script_args.model_id,
+        script_args.model_name,
         attn_implementation="flash_attention_2", # SDPA를 사용하고, 대안으로 'flash_attention_2'를 사용할 수 있음
         torch_dtype=torch.bfloat16,
         use_cache=False if training_args.gradient_checkpointing else True,  # 그래디언트 체크포인팅을 사용할 때는 True가 필요함 
